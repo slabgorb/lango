@@ -1,12 +1,7 @@
-// Markov chain generator for making up pretend languages
-
-package main
+package lango
 
 import (
-	"fmt"
-	"io/ioutil"
 	"math/rand"
-	"regexp"
 	"strings"
 	"time"
 )
@@ -18,8 +13,8 @@ type CharacterList struct {
 var random = rand.New(rand.NewSource(time.Now().UnixNano()))
 
 const (
-	START = '^'
-	END   = '$'
+	start = '^'
+	end   = '$'
 )
 
 type Chain struct {
@@ -27,7 +22,7 @@ type Chain struct {
 	characterLists map[string]*CharacterList
 }
 
-func NewCharacterList() *CharacterList {
+func newCharacterList() *CharacterList {
 	return &CharacterList{characters: make(map[rune]int)}
 }
 
@@ -35,28 +30,28 @@ func NewChain(lookback int) *Chain {
 	return &Chain{lookback: lookback, characterLists: make(map[string]*CharacterList)}
 }
 
-func (chain *Chain) AddRune(key string, char rune) {
+func (chain *Chain) addRune(key string, char rune) {
 	_, ok := chain.characterLists[key]
 	if !ok {
-		chain.characterLists[key] = NewCharacterList()
+		chain.characterLists[key] = newCharacterList()
 	}
 	chain.characterLists[key].characters[char]++
 }
 
 func (chain *Chain) AddWord(word string) {
-	keyRunes, key := chain.NewKey()
+	keyRunes, key := chain.newKey()
 	for _, char := range strings.ToLower(word) {
-		chain.AddRune(key, char)
+		chain.addRune(key, char)
 		keyRunes, key = rotateKey(keyRunes, char)
 	}
-	chain.AddRune(key, END)
+	chain.addRune(key, end)
 
 }
 
-func (chain *Chain) NewKey() ([]rune, string) {
+func (chain *Chain) newKey() ([]rune, string) {
 	keyRunes := make([]rune, chain.lookback)
 	for index, _ := range keyRunes {
-		keyRunes[index] = START
+		keyRunes[index] = start
 	}
 	return keyRunes, string(keyRunes)
 
@@ -68,10 +63,10 @@ func rotateKey(key []rune, char rune) ([]rune, string) {
 }
 
 func (chain *Chain) MakeWord() (word string) {
-	keyRunes, key := chain.NewKey()
+	keyRunes, key := chain.newKey()
 	for {
 		char := chain.characterLists[key].Choose(len(word))
-		if char == END {
+		if char == end {
 			break
 		}
 		word += string(char)
@@ -81,7 +76,7 @@ func (chain *Chain) MakeWord() (word string) {
 	return
 }
 
-func (characterList *CharacterList) TotalCounts() (total int) {
+func (characterList *CharacterList) totalCounts() (total int) {
 	total = 0
 	for _, value := range characterList.characters {
 		total = total + value
@@ -90,7 +85,7 @@ func (characterList *CharacterList) TotalCounts() (total int) {
 }
 
 func (characterList *CharacterList) Choose(wordLength int) (choice rune) {
-	randomNumber := random.Intn(characterList.TotalCounts())
+	randomNumber := random.Intn(characterList.totalCounts())
 	position := 0
 	for char, count := range characterList.characters {
 		position += count
@@ -100,44 +95,4 @@ func (characterList *CharacterList) Choose(wordLength int) (choice rune) {
 
 	}
 	return
-}
-
-func readCorpus(path string) []string {
-	re := regexp.MustCompile(`[^\p{L}]`)
-	dat, err := ioutil.ReadFile(path)
-	if err != nil {
-		panic(err)
-	}
-	rawWords := strings.Split(string(dat), " ")
-	var words []string
-	for _, word := range rawWords {
-		if word != "" {
-			words = append(words, word)
-		}
-	}
-	for index, word := range words {
-		words[index] = re.ReplaceAllString(word, "")
-	}
-	return words
-}
-
-func main() {
-	wordSlices := make(chan []string)
-	var words []string
-	chain := NewChain(2)
-	go func() {
-		wordSlices <- readCorpus("/Users/keithavery/Projects/fantasy-language-maker/corpus/french.txt")
-	}()
-	go func() {
-		wordSlices <- readCorpus("/Users/keithavery/Projects/fantasy-language-maker/corpus/english.txt")
-	}()
-	for i := 0; i < 2; i++ {
-		result := <-wordSlices
-		words = append(words, result...)
-	}
-	for _, word := range words {
-		chain.AddWord(word)
-	}
-	fmt.Println(chain.MakeWord())
-
 }
